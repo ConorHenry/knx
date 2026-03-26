@@ -184,7 +184,7 @@ export function PuzzleGrid({
       el.classList.add('animate-tile-flip');
     }
 
-    // Clean up after animation completes (1020ms at 3×, 340ms at 1×)
+    // Clean up after animation completes (340ms + small buffer)
     const cleanup = setTimeout(() => {
       for (const { el } of deltas) {
         el.classList.remove('animate-tile-flip');
