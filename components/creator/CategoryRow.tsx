@@ -15,6 +15,7 @@ import { type Difficulty, DIFFICULTY_COLORS, DIFFICULTY_LABELS, DIFFICULTY_ORDER
 interface CategoryRowProps {
   category: CategoryDraft;
   aiLoading: { categoryId: string; type: 'items' | 'name' } | null;
+  errorItems: Set<string>;
   onNameChange: (name: string) => void;
   onItemChange: (index: number, value: string) => void;
   onColorChange: (color: Difficulty) => void;
@@ -26,6 +27,7 @@ interface CategoryRowProps {
 export function CategoryRow({
   category,
   aiLoading,
+  errorItems,
   onNameChange,
   onItemChange,
   onColorChange,
@@ -95,6 +97,7 @@ export function CategoryRow({
             placeholder="Category name"
             value={category.name}
             onChange={(e) => onNameChange(e.target.value)}
+            maxLength={60}
             className="flex-1 bg-white/70"
             aria-label="Category name"
           />
@@ -137,16 +140,20 @@ export function CategoryRow({
       {/* Items row */}
       <div className="flex items-center gap-2">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-1">
-          {category.items.map((item, idx) => (
-            <Input
-              key={idx}
-              placeholder={`Item ${idx + 1}`}
-              value={item}
-              onChange={(e) => onItemChange(idx, e.target.value)}
-              className="bg-white/70"
-              aria-label={`Item ${idx + 1}`}
-            />
-          ))}
+          {category.items.map((item, idx) => {
+            const isDupe = item.trim() && errorItems.has(item.trim().toLowerCase());
+            return (
+              <Input
+                key={idx}
+                placeholder={`Item ${idx + 1}`}
+                value={item}
+                onChange={(e) => onItemChange(idx, e.target.value)}
+                maxLength={40}
+                className={isDupe ? 'bg-white/70 border-destructive ring-1 ring-destructive' : 'bg-white/70'}
+                aria-label={`Item ${idx + 1}`}
+              />
+            );
+          })}
         </div>
         <Button
           variant="outline"

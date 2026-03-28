@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useGameState } from '@/hooks/useGameState';
 import type { Puzzle } from '@/lib/types';
 import { PuzzleGrid } from './PuzzleGrid';
@@ -15,7 +16,7 @@ interface GameBoardProps {
 
 // Delay before the win modal appears, giving the last SolvedCategory card
 // time to animate in before the overlay covers everything.
-const MODAL_DELAY_MS = 600;
+const MODAL_DELAY_MS = 3600;
 
 export function GameBoard({ puzzle }: GameBoardProps) {
   const {
@@ -62,12 +63,17 @@ export function GameBoard({ puzzle }: GameBoardProps) {
   return (
     <main className="min-h-screen bg-white flex flex-col items-center px-4 py-8">
       <div className="w-full max-w-lg space-y-4">
-        {/* Header */}
+        {/* Header — includes link to creator */}
         <header className="text-center space-y-1">
           <h1 className="text-3xl font-extrabold tracking-tight">Clique</h1>
           <p className="text-sm text-muted-foreground">
             Group 16 items into 4 categories of 4.
           </p>
+          <Link href="/create" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="mt-2">
+              Create your own puzzle
+            </Button>
+          </Link>
         </header>
 
         {/* Solved categories (slide in from top) */}

@@ -3,7 +3,6 @@
 import { useReducer, useMemo } from 'react';
 import { type Difficulty, type Puzzle, DIFFICULTY_ORDER } from '@/lib/types';
 import { encodePuzzle } from '@/lib/encoding';
-import { validateNoDuplicateItems, validatePuzzleComplete } from '@/lib/game-logic';
 
 export type CategoryDraft = {
   id: string;
@@ -20,7 +19,6 @@ type CreatorState = {
   categories: [CategoryDraft, CategoryDraft, CategoryDraft, CategoryDraft];
   aiLoading: AiLoading;
   aiError: string | null;
-  submitError: string | null;
 };
 
 type Action =
@@ -30,8 +28,7 @@ type Action =
   | { type: 'SET_AI_LOADING'; loading: AiLoading }
   | { type: 'SET_AI_ERROR'; error: string | null }
   | { type: 'APPLY_SUGGESTED_ITEMS'; categoryId: string; suggestions: string[] }
-  | { type: 'APPLY_SUGGESTED_NAME'; categoryId: string; name: string }
-  | { type: 'SET_SUBMIT_ERROR'; error: string | null };
+  | { type: 'APPLY_SUGGESTED_NAME'; categoryId: string; name: string };
 
 function makeInitialCategories(): [CategoryDraft, CategoryDraft, CategoryDraft, CategoryDraft] {
   return DIFFICULTY_ORDER.map((color, i) => ({
@@ -106,9 +103,6 @@ function reducer(state: CreatorState, action: Action): CreatorState {
         ) as CreatorState['categories'],
       };
 
-    case 'SET_SUBMIT_ERROR':
-      return { ...state, submitError: action.error };
-
     default:
       return state;
   }
@@ -119,7 +113,6 @@ export function usePuzzleCreator() {
     categories: makeInitialCategories(),
     aiLoading: null,
     aiError: null,
-    submitError: null,
   });
 
   const puzzle: Puzzle = useMemo(
@@ -133,17 +126,39 @@ export function usePuzzleCreator() {
     [state.categories]
   );
 
+  // True when every name and every item is non-empty.
+  const isComplete = useMemo(
+    () =>
+      state.categories.every(
+        (cat) => cat.name.trim() && cat.items.every((item) => item.trim())
+      ),
+    [state.categories]
+  );
+
+  // Set of lowercase-trimmed item values that appear more than once.
+  const duplicateItems = useMemo(() => {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const cat of state.categories) {
+      for (const item of cat.items) {
+        const key = item.trim().toLowerCase();
+        if (!key) continue;
+        if (seen.has(key)) dupes.add(key);
+        else seen.add(key);
+      }
+    }
+    return dupes;
+  }, [state.categories]);
+
   const shareUrl = useMemo(() => {
-    const incomplete = validatePuzzleComplete(puzzle);
-    const duplicate = validateNoDuplicateItems(puzzle);
-    if (incomplete || duplicate) return null;
+    if (!isComplete || duplicateItems.size > 0) return null;
     try {
       const encoded = encodePuzzle(puzzle);
       return `${typeof window !== 'undefined' ? window.location.origin : ''}/play?p=${encoded}`;
     } catch {
       return null;
     }
-  }, [puzzle]);
+  }, [puzzle, isComplete, duplicateItems.size]);
 
   function setName(categoryId: string, name: string) {
     dispatch({ type: 'SET_NAME', categoryId, name });
@@ -168,7 +183,7 @@ export function usePuzzleCreator() {
       if (!res.ok) throw new Error('Suggestions unavailable');
       const data = await res.json();
       dispatch({ type: 'APPLY_SUGGESTED_ITEMS', categoryId, suggestions: data.suggestions });
-    } catch (err) {
+    } catch {
       dispatch({ type: 'SET_AI_ERROR', error: 'Suggestions unavailable. Try again.' });
     }
   }
@@ -183,10 +198,9 @@ export function usePuzzleCreator() {
       });
       if (!res.ok) throw new Error('Suggestions unavailable');
       const data = await res.json();
-      // Return suggestions for the UI to present as choices
       dispatch({ type: 'SET_AI_LOADING', loading: null });
       return data.suggestions as string[];
-    } catch (err) {
+    } catch {
       dispatch({ type: 'SET_AI_ERROR', error: 'Suggestions unavailable. Try again.' });
       return [];
     }
@@ -196,26 +210,12 @@ export function usePuzzleCreator() {
     dispatch({ type: 'APPLY_SUGGESTED_NAME', categoryId, name });
   }
 
-  function validate(): string | null {
-    const completeErr = validatePuzzleComplete(puzzle);
-    if (completeErr) {
-      dispatch({ type: 'SET_SUBMIT_ERROR', error: completeErr });
-      return completeErr;
-    }
-    const dupErr = validateNoDuplicateItems(puzzle);
-    if (dupErr) {
-      dispatch({ type: 'SET_SUBMIT_ERROR', error: dupErr });
-      return dupErr;
-    }
-    dispatch({ type: 'SET_SUBMIT_ERROR', error: null });
-    return null;
-  }
-
   return {
     categories: state.categories,
     aiLoading: state.aiLoading,
     aiError: state.aiError,
-    submitError: state.submitError,
+    isComplete,
+    duplicateItems,
     shareUrl,
     setName,
     setItem,
@@ -223,6 +223,5 @@ export function usePuzzleCreator() {
     suggestItems,
     suggestName,
     applyNameSuggestion,
-    validate,
   };
 }
