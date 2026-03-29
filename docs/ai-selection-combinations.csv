@@ -1,0 +1,24 @@
+Section,Targets,Context,Valid,Prompt Type,Notes
+Name target,N(A) empty,none,TRUE,P1 - Name by difficulty,Difficulty is only signal
+Name target,N(A) empty,T(A) filled (1-3 tiles),TRUE,P2 - Name for known tiles,
+Name target,N(A) empty,T(B) filled,FALSE,,Cross-cat context cannot name cat A
+Name target,N(A) empty,T(A) filled + T(B) filled,FALSE,,Cross-cat context present with name target
+Name target,N(A) empty,N(B) filled,OPEN QUESTION,,Suggest name distinct from B? Niche but plausible
+Tile targets same cat,T(A) empty (1-3),none,TRUE,P3 - Tile(s) for category,Difficulty as only signal
+Tile targets same cat,T(A) empty (1-3),T(A) filled,TRUE,P3 - Tile(s) for category,Fit alongside same-cat siblings
+Tile targets same cat,T(A) empty (1-3),N(A) filled,TRUE,P3 - Tile(s) for category,Tiles for named category
+Tile targets same cat,T(A) empty (1-3),T(A) filled + N(A) filled,TRUE,P3 - Tile(s) for category,Richest same-cat suggestion
+Tile targets same cat,T(A) empty (1-3),T(B) filled,TRUE,P4 - Red herring,Tile for A that evokes B tiles
+Tile targets same cat,T(A) empty (1-3),N(B) filled,TRUE,P4 - Red herring,Tile for A that evokes B theme by name
+Tile targets same cat,T(A) empty (1-3),T(B) filled + N(B) filled,TRUE,P4 - Red herring,Richest single-cat red herring
+Tile targets same cat,T(A) empty (1-3),T(A) filled + T(B) filled,TRUE,P4 - Red herring,Red herring anchored to A and B
+Tile targets same cat,T(A) empty (1-3),T(B) filled + T(C) filled,TRUE,P4 - Red herring,Multi-category red herring
+Tile targets across cats,T(A) empty + T(B) empty,none,TRUE,P5 - Mutual red herrings,
+Tile targets across cats,T(A) empty + T(B) empty,T(A) filled + T(B) filled,TRUE,P5 - Mutual red herrings,With same-cat context for both
+Tile targets across cats,T(A) empty + T(B) empty,N(A) filled + N(B) filled,TRUE,P5 - Mutual red herrings,With named cats
+Tile targets across cats,T(A) empty + T(B) empty,T(C) filled,TRUE,P5 - Mutual red herrings,Three-way red herring
+Tile targets across cats,T(A) empty + T(B) empty + T(C) empty,anything,TRUE,P5 - Mutual red herrings,Triple mutual red herring
+Mixed name + tile targets,N(A) empty + T(A) empty (1-3),none,TRUE,P6 - Co-suggest name and tiles,All same category
+Mixed name + tile targets,N(A) empty + T(A) empty (1-3),T(A) filled,TRUE,P6 - Co-suggest name and tiles,With same-cat tile context
+Mixed name + tile targets,N(A) empty + T(A) empty (1-3),T(B) filled,FALSE,,Name target with cross-cat context
+Mixed name + tile targets,N(A) empty + T(B) empty,anything,FALSE,,Targets span different categories

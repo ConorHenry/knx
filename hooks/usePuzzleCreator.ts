@@ -11,24 +11,14 @@ export type CategoryDraft = {
   items: [string, string, string, string];
 };
 
-type AiLoading =
-  | { categoryId: string; type: 'items' | 'name' }
-  | null;
-
 type CreatorState = {
   categories: [CategoryDraft, CategoryDraft, CategoryDraft, CategoryDraft];
-  aiLoading: AiLoading;
-  aiError: string | null;
 };
 
 type Action =
   | { type: 'SET_NAME'; categoryId: string; name: string }
   | { type: 'SET_ITEM'; categoryId: string; index: number; value: string }
-  | { type: 'SET_COLOR'; categoryId: string; color: Difficulty }
-  | { type: 'SET_AI_LOADING'; loading: AiLoading }
-  | { type: 'SET_AI_ERROR'; error: string | null }
-  | { type: 'APPLY_SUGGESTED_ITEMS'; categoryId: string; suggestions: string[] }
-  | { type: 'APPLY_SUGGESTED_NAME'; categoryId: string; name: string };
+  | { type: 'SET_COLOR'; categoryId: string; color: Difficulty };
 
 function makeInitialCategories(): [CategoryDraft, CategoryDraft, CategoryDraft, CategoryDraft] {
   return DIFFICULTY_ORDER.map((color, i) => ({
@@ -68,41 +58,6 @@ function reducer(state: CreatorState, action: Action): CreatorState {
         ) as CreatorState['categories'],
       };
 
-    case 'SET_AI_LOADING':
-      return { ...state, aiLoading: action.loading, aiError: null };
-
-    case 'SET_AI_ERROR':
-      return { ...state, aiError: action.error, aiLoading: null };
-
-    case 'APPLY_SUGGESTED_ITEMS': {
-      return {
-        ...state,
-        aiLoading: null,
-        aiError: null,
-        categories: state.categories.map((cat) => {
-          if (cat.id !== action.categoryId) return cat;
-          const items = [...cat.items] as [string, string, string, string];
-          let suggestionIdx = 0;
-          for (let i = 0; i < 4 && suggestionIdx < action.suggestions.length; i++) {
-            if (!items[i].trim()) {
-              items[i] = action.suggestions[suggestionIdx++];
-            }
-          }
-          return { ...cat, items };
-        }) as CreatorState['categories'],
-      };
-    }
-
-    case 'APPLY_SUGGESTED_NAME':
-      return {
-        ...state,
-        aiLoading: null,
-        aiError: null,
-        categories: state.categories.map((cat) =>
-          cat.id === action.categoryId ? { ...cat, name: action.name } : cat
-        ) as CreatorState['categories'],
-      };
-
     default:
       return state;
   }
@@ -111,8 +66,6 @@ function reducer(state: CreatorState, action: Action): CreatorState {
 export function usePuzzleCreator() {
   const [state, dispatch] = useReducer(reducer, {
     categories: makeInitialCategories(),
-    aiLoading: null,
-    aiError: null,
   });
 
   const puzzle: Puzzle = useMemo(
@@ -126,7 +79,6 @@ export function usePuzzleCreator() {
     [state.categories]
   );
 
-  // True when every name and every item is non-empty.
   const isComplete = useMemo(
     () =>
       state.categories.every(
@@ -135,7 +87,6 @@ export function usePuzzleCreator() {
     [state.categories]
   );
 
-  // Set of lowercase-trimmed item values that appear more than once.
   const duplicateItems = useMemo(() => {
     const seen = new Set<string>();
     const dupes = new Set<string>();
@@ -172,56 +123,13 @@ export function usePuzzleCreator() {
     dispatch({ type: 'SET_COLOR', categoryId, color });
   }
 
-  async function suggestItems(categoryId: string, categoryName: string, existingItems: string[]) {
-    dispatch({ type: 'SET_AI_LOADING', loading: { categoryId, type: 'items' } });
-    try {
-      const res = await fetch('/api/ai/suggest-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categoryName, existingItems }),
-      });
-      if (!res.ok) throw new Error('Suggestions unavailable');
-      const data = await res.json();
-      dispatch({ type: 'APPLY_SUGGESTED_ITEMS', categoryId, suggestions: data.suggestions });
-    } catch {
-      dispatch({ type: 'SET_AI_ERROR', error: 'Suggestions unavailable. Try again.' });
-    }
-  }
-
-  async function suggestName(categoryId: string, items: [string, string, string, string]) {
-    dispatch({ type: 'SET_AI_LOADING', loading: { categoryId, type: 'name' } });
-    try {
-      const res = await fetch('/api/ai/suggest-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
-      });
-      if (!res.ok) throw new Error('Suggestions unavailable');
-      const data = await res.json();
-      dispatch({ type: 'SET_AI_LOADING', loading: null });
-      return data.suggestions as string[];
-    } catch {
-      dispatch({ type: 'SET_AI_ERROR', error: 'Suggestions unavailable. Try again.' });
-      return [];
-    }
-  }
-
-  function applyNameSuggestion(categoryId: string, name: string) {
-    dispatch({ type: 'APPLY_SUGGESTED_NAME', categoryId, name });
-  }
-
   return {
     categories: state.categories,
-    aiLoading: state.aiLoading,
-    aiError: state.aiError,
     isComplete,
     duplicateItems,
     shareUrl,
     setName,
     setItem,
     setColor,
-    suggestItems,
-    suggestName,
-    applyNameSuggestion,
   };
 }

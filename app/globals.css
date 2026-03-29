@@ -93,6 +93,22 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* ─── AI mode: sparkle button pop on toggle ─────────────────────────────── */
+
+@keyframes sparkle-pop {
+  0%   { transform: scale(0.5) rotate(-25deg); opacity: 0.3; }
+  65%  { transform: scale(1.25) rotate(8deg);  opacity: 1; }
+  100% { transform: scale(1)    rotate(0deg);  opacity: 1; }
+}
+
+/* ─── AI mode: snap-in for escalated fields ──────────────────────────────── */
+
+@keyframes snap-in {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.5); }
+  35%  { transform: scale(1.07); box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
 /* ─── Utility classes ─────────────────────────────────────────────────────── */
 
 @layer utilities {
@@ -101,13 +117,28 @@
   }
 
   .animate-shake {
+    animation: shake 3s ease-in-out;
+  }
+
+  /* Sparkle icon pop — re-triggered by React key change on toggle */
+  .animate-sparkle-pop {
+    animation: sparkle-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  /* Faster shake for AI mode chip deselection animation */
+  .animate-shake-fast {
     animation: shake 0.5s ease-in-out;
+  }
+
+  /* Snap-in pulse for AI mode escalation (name field auto-added as target) */
+  .animate-snap-in {
+    animation: snap-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Phase 1: solving tile drifts to its assigned top-row slot.
      --drift-x / --drift-y are set via inline style per tile. */
   .animate-tile-drift {
-    animation: tile-drift-to-row 360ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    animation: tile-drift-to-row 2160ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
     pointer-events: none;
     position: relative;
     z-index: 10;
@@ -118,12 +149,12 @@
      the element is instantly at the "from" state when the class is applied,
      so the browser never paints the layout-jump. */
   .animate-tile-flip {
-    animation: tile-flip-settle 340ms cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
+    animation: tile-flip-settle 2040ms cubic-bezier(0.25, 0.46, 0.45, 0.94) backwards;
   }
 
   /* Solved-category row materialises from above, merging where the tiles went. */
   .animate-category-merge-in {
-    animation: category-merge-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: category-merge-in 2760ms cubic-bezier(0.22, 1, 0.36, 1) both;
     transform-origin: top center;
   }
 
