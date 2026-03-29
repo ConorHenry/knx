@@ -172,12 +172,12 @@ export function CreatorForm() {
             <div
               className={cn(
                 'rounded-lg px-4 py-2.5 text-sm text-center',
-                aiMode.scenario.invalidMessage
+                aiMode.error || aiMode.scenario.invalidMessage
                   ? 'bg-destructive/10 text-destructive'
                   : 'bg-indigo-50 text-indigo-700',
               )}
             >
-              {aiMode.scenario.invalidMessage ?? aiMode.scenario.instruction}
+              {aiMode.error ?? aiMode.scenario.invalidMessage ?? aiMode.scenario.instruction}
             </div>
           </div>
         </div>

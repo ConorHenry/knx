@@ -33,6 +33,13 @@ export type ScenarioResult = {
   invalidMessage: string | null; // replaces instruction when canSuggest is false
 };
 
+// Shape of the /api/ai/suggest response (shared between route and hook).
+export type SuggestResult = {
+  suggestions: Record<string, string>;
+  extras?: string[];                    // P1–P4: flat array of extra values
+  extrasByCat?: Record<string, string[]>; // P5: per-category extras
+};
+
 // Per-field state snapshot returned by useAiMode.getFieldInfo.
 export type AiFieldInfo = {
   isSelected: boolean;

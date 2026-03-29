@@ -194,9 +194,9 @@ function reducer(state: GameState, action: Action): GameState {
 // Keep in sync with the CSS animation durations in globals.css.
 /** Tiles reach their top-row targets at ~360 ms; fire just before so the
  *  category row begins forming as the tiles arrive. */
-const COMPLETE_SOLVE_DELAY_MS = 320;
+const COMPLETE_SOLVE_DELAY_MS = 1920;
 /** Pause between the 3rd category reveal and the last auto-solve. */
-const AUTO_SOLVE_DELAY_MS = 380;
+const AUTO_SOLVE_DELAY_MS = 2280;
 
 export function useGameState(puzzle: Puzzle) {
   const [state, dispatch] = useReducer(reducer, puzzle, makeInitialState);
@@ -233,7 +233,7 @@ export function useGameState(puzzle: Puzzle) {
 
   const submitGuess = useCallback(() => {
     dispatch({ type: 'SUBMIT_GUESS' });
-    setTimeout(() => dispatch({ type: 'CLEAR_LAST_RESULT' }), 800);
+    setTimeout(() => dispatch({ type: 'CLEAR_LAST_RESULT' }), 4800);
   }, []);
 
   const shuffle = useCallback(() => {
