@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { GuessRecord } from '@/hooks/useGameState';
+import { computeRemainingRoutes } from '@/lib/animations/remaining-tile-routes';
 
 interface PuzzleGridProps {
   grid: string[];
@@ -16,20 +17,36 @@ interface PuzzleGridProps {
   onToggleItem: (item: string) => void;
 }
 
-type Delta = { dx: number; dy: number };
+// ── Timing constants ──────────────────────────────────────────────────────────
+// Total duration for individual tile rearrangement paths.
+// Must exceed COMPLETE_SOLVE_DELAY_MS so the Phase 2 correction
+// still has meaningful time to smoothly land tiles on their actual targets.
+const REARRANGE_DURATION_MS = 800;
+
+// Cleanup margin after all animations finish.
+const PHASE2_CLEANUP_BUFFER_MS = 400;
 
 /**
- * All animation logic is applied via direct DOM mutation in useLayoutEffect
- * so we never cause extra React renders or lose animation-frame timing.
+ * All animation logic is applied via direct DOM mutation in useLayoutEffect /
+ * Web Animations API so we never cause extra React renders.
  *
  * Phase 1 (solvingItems becomes non-empty):
- *   • Solving tiles          → animate-tile-drift  (up + across to reveal-row slots)
- *   • Top-row non-solving    → animate-tile-drift  (horizontal only, to new column)
+ *   • Solving tiles     → CSS animate-tile-drift (up + across to reveal-row slots)
+ *   • Non-solving tiles → start rearranging simultaneously:
+ *       each tile moves along a v-first L-shaped path directly from its current
+ *       position to its predicted target in the new compact grid.
+ *       Vertical-first ordering causes top-row tiles to drop out of the way
+ *       before sliding to their new columns.
  *
- * Phase 2 (grid shrinks after COMPLETE_SOLVE):
- *   • Former top-row tiles   → cancel Phase 1 drift, FLIP from mid-animation position
- *   • All other remaining    → FLIP from preFlipRects (original position)
+ * Phase 2 (COMPLETE_SOLVE shrinks the grid):
+ *   • The grid container shifts down by containerShift and natural positions
+ *     change.  Because this fires in useLayoutEffect (before paint) we cancel
+ *     each rearrangement animation and restart it from the tile's current
+ *     visual position toward its now-known actual natural CSS position.
+ *     The user never sees a jump.
  */
+
+
 export function PuzzleGrid({
   grid,
   selected,
@@ -43,19 +60,37 @@ export function PuzzleGrid({
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   // Snapshot of every tile's screen position taken at Phase 1 start.
-  // Used as the "from" position for Group-2 (non-top-row) tiles in Phase 2.
+  // Acts as a sentinel (size > 0 = Phase 1 has run) for the Phase 2 guard.
   const preFlipRects = useRef<Map<string, DOMRect>>(new Map());
 
-  // Which non-solving tiles were in the top row when Phase 1 started.
-  // Phase 2 uses current getBoundingClientRect for these (mid-animation)
-  // rather than preFlipRects, so the FLIP continues seamlessly.
-  const phase1TopRowItems = useRef<Set<string>>(new Set());
+  // Bottom of the solved-categories area at Phase 1 start.
+  const phase1SolvedBottom = useRef<number | null>(null);
+
+  // Timestamp when Phase 1 started, used by Phase 2 to compute remaining time.
+  const phase1StartTime = useRef<number | null>(null);
+
+  // The containerShift prediction used when building Phase 1 keyframes.
+  const predictedContainerShift = useRef<number>(0);
+
+  // Running individual-rearrangement animations, keyed by tile ID.
+  const rearrangeAnimations = useRef<Map<string, Animation>>(new Map());
+
+  // Cleanup timer stored in a ref so React inter-render cleanups don't cancel it.
+  const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sentinels to detect Phase 1 / Phase 2 triggers on each render.
   const prevGridLen = useRef(grid.length);
   const prevSolvingLen = useRef(0);
 
-  // Announce one-away feedback to screen readers
+  // Cancel everything on unmount.
+  useEffect(() => {
+    return () => {
+      if (cleanupTimerRef.current !== null) clearTimeout(cleanupTimerRef.current);
+      rearrangeAnimations.current.forEach(anim => anim.cancel());
+    };
+  }, []);
+
+  // Announce one-away feedback to screen readers.
   useEffect(() => {
     if (lastGuessResult?.result === 'one-away' && feedbackRef.current) {
       feedbackRef.current.textContent = 'One away!';
@@ -66,15 +101,26 @@ export function PuzzleGrid({
   }, [lastGuessResult]);
 
   // ── Phase 1 ──────────────────────────────────────────────────────────────
+  // Solving tiles drift up; remaining tiles begin rearranging simultaneously.
   useLayoutEffect(() => {
     if (solvingItems.length === prevSolvingLen.current) return;
     prevSolvingLen.current = solvingItems.length;
-    if (solvingItems.length === 0) return; // COMPLETE_SOLVE cleanup handled in Phase 2
+    if (solvingItems.length === 0) return;
+
+    // Cancel any leftover work from a previous solve cycle.
+    if (cleanupTimerRef.current !== null) clearTimeout(cleanupTimerRef.current);
+    rearrangeAnimations.current.forEach(anim => anim.cancel());
+    rearrangeAnimations.current = new Map();
 
     // Snapshot ALL tile positions before anything moves.
     const snapshot = new Map<string, DOMRect>();
     itemRefs.current.forEach((el, item) => snapshot.set(item, el.getBoundingClientRect()));
     preFlipRects.current = snapshot;
+
+    // Record solved area bottom and Phase 1 start time.
+    phase1SolvedBottom.current =
+      solvedAreaRef.current?.getBoundingClientRect().bottom ?? 0;
+    phase1StartTime.current = Date.now();
 
     // Measure tile dimensions from the first two tiles.
     const el0 = itemRefs.current.get(grid[0]);
@@ -85,14 +131,21 @@ export function PuzzleGrid({
     const tileH = r0.height;
     const gap = el1 ? el1.getBoundingClientRect().left - (r0.left + tileW) : 8;
 
-    // Vertical target: bottom of the solved-categories container = where the
-    // next reveal row will appear.
-    const solvedBottom = solvedAreaRef.current
-      ? solvedAreaRef.current.getBoundingClientRect().bottom
-      : r0.top;
+    // Predict containerShift — height of the incoming solved-category row plus
+    // the space-y-2 gap that separates non-first children.
+    // If a solved row already exists, measure it directly; otherwise estimate
+    // from tile height (no space-y-2 margin on the very first child).
+    let predicted: number;
+    if (solvedAreaRef.current && solvedAreaRef.current.children.length > 0) {
+      const firstChild = solvedAreaRef.current.children[0] as HTMLElement;
+      predicted = firstChild.getBoundingClientRect().height + gap;
+    } else {
+      predicted = tileH; // first solve: no space-y-2 margin on first child
+    }
+    predictedContainerShift.current = predicted;
 
-    // ── Solving tiles: drift up + across to their assigned column slots ──────
-    // Sort by current column so the leftmost solving tile gets column 0, etc.
+    // Solving tiles: CSS drift up + across to their assigned column slots.
+    const solvedBottom = phase1SolvedBottom.current;
     const sortedSolving = [...solvingItems].sort(
       (a, b) => (grid.indexOf(a) % 4) - (grid.indexOf(b) % 4),
     );
@@ -109,30 +162,44 @@ export function PuzzleGrid({
       el.classList.add('animate-tile-drift');
     });
 
-    // ── Top-row non-solving tiles: drift horizontally to new column ───────────
-    // After the 4 solving tiles are removed, the remaining tiles are re-indexed.
-    // Non-solving top-row tiles always land in row 0 of the new grid (they have
-    // the smallest new indices), so dy = 0 and only dx is needed.
-    const remaining = grid.filter(item => !solvingItems.includes(item));
-    const topRowNonSolving = grid.slice(0, 4).filter(item => !solvingItems.includes(item));
-    phase1TopRowItems.current = new Set(topRowNonSolving);
-
-    topRowNonSolving.forEach(item => {
-      const el = itemRefs.current.get(item);
-      if (!el) return;
-      const oldCol = grid.indexOf(item) % 4; // always < 4 since they're in row 0
-      const newIdx = remaining.indexOf(item);
-      const newCol = newIdx % 4;
-      const dx = (newCol - oldCol) * (tileW + gap);
-      if (Math.abs(dx) < 0.5) return; // already in the right column
-      el.style.setProperty('--drift-x', `${dx}px`);
-      el.style.setProperty('--drift-y', '0px');
-      el.classList.add('animate-tile-drift');
+    // Remaining tiles: animate to their predicted positions in the new compact
+    // grid, simultaneously with the solving-tile drift.  Routes are computed
+    // by computeRemainingRoutes which guarantees:
+    //   • No two remaining tiles occupy the same cell at any point.
+    //   • Tiles targeting row 0 use V-first paths (top row fills fast).
+    //   • Other L-shaped tiles alternate H-first / V-first.
+    const routes = computeRemainingRoutes({
+      grid,
+      solvingItems,
+      tileW,
+      tileH,
+      gap,
+      containerShift: predicted,
     });
+
+    routes.forEach(({ tileId, keyframes }) => {
+      const el = itemRefs.current.get(tileId);
+      if (!el) return;
+      const anim = el.animate(keyframes, {
+        duration: REARRANGE_DURATION_MS,
+        easing: 'ease-in-out',
+        fill: 'forwards',
+      });
+      rearrangeAnimations.current.set(tileId, anim);
+    });
+
+    // Cleanup after all animations finish.
+    cleanupTimerRef.current = setTimeout(() => {
+      rearrangeAnimations.current.forEach(anim => anim.cancel());
+      rearrangeAnimations.current = new Map();
+    }, REARRANGE_DURATION_MS + PHASE2_CLEANUP_BUFFER_MS);
   });
 
-  // ── Phase 2 ──────────────────────────────────────────────────────────────
-  // Fires when grid shrinks (COMPLETE_SOLVE removed the 4 solving tiles).
+  // ── Phase 2 correction ────────────────────────────────────────────────────
+  // Fires when COMPLETE_SOLVE shrinks the grid, changing every remaining tile's
+  // natural CSS position.  Running in useLayoutEffect (before paint) we cancel
+  // each animation and immediately restart it from the tile's current visual
+  // position toward its actual new natural position — no visible jump.
   useLayoutEffect(() => {
     if (grid.length >= prevGridLen.current) {
       prevGridLen.current = grid.length;
@@ -141,59 +208,51 @@ export function PuzzleGrid({
     prevGridLen.current = grid.length;
     if (preFlipRects.current.size === 0) return;
 
-    const deltas: Array<{ el: HTMLButtonElement; d: Delta }> = [];
+    phase1SolvedBottom.current = null;
+
+    const elapsed = Date.now() - (phase1StartTime.current ?? Date.now());
+    const remainingTime = Math.max(REARRANGE_DURATION_MS - elapsed, 100);
 
     itemRefs.current.forEach((el, item) => {
-      let fromX: number;
-      let fromY: number;
+      const runningAnim = rearrangeAnimations.current.get(item);
+      if (!runningAnim) return;
 
-      if (phase1TopRowItems.current.has(item)) {
-        // Group 1: tile was animating in Phase 1.
-        // Capture its CURRENT visual position (mid-animation) via getBoundingClientRect,
-        // then cancel the Phase 1 drift so the tile is at its natural 12-tile position.
-        const midAnim = el.getBoundingClientRect();
-        el.classList.remove('animate-tile-drift');
-        el.style.removeProperty('--drift-x');
-        el.style.removeProperty('--drift-y');
-        fromX = midAnim.left;
-        fromY = midAnim.top;
-      } else {
-        // Group 2: tile hasn't moved yet — use the preFlipRects snapshot.
-        const snap = preFlipRects.current.get(item);
-        if (!snap) return;
-        fromX = snap.left;
-        fromY = snap.top;
-      }
+      // Current visual position (includes running animation transform).
+      // NOTE: COMPLETE_SOLVE has already mutated the DOM — the tile's CSS
+      // natural position has shifted.  midAnim = (new CSS) + (Phase-1 transform),
+      // not the pre-mutation visual position we want to start the correction from.
+      const midAnim = el.getBoundingClientRect();
+      runningAnim.cancel();
+      rearrangeAnimations.current.delete(item);
 
-      const cur = el.getBoundingClientRect(); // natural position in the new 12-tile grid
-      const dx = fromX - cur.left;
-      const dy = fromY - cur.top;
-      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-        deltas.push({ el, d: { dx, dy } });
-      }
+      // New natural CSS position after COMPLETE_SOLVE re-render.
+      const newNatural = el.getBoundingClientRect();
+
+      // Phase-1 animation transform at this moment (direction-agnostic):
+      //   animTransX = midAnim.left - newNatural.left
+      // Pre-mutation visual position = preFlipRects (old CSS) + animTransX.
+      // Correction must start there so the user sees no jump:
+      //   fromTransX = preFlipRects.left + animTransX - newNatural.left
+      //              = preFlipRects.left + midAnim.left - 2 * newNatural.left
+      const preFlip = preFlipRects.current.get(item);
+      const fromTransX =
+        (preFlip?.left ?? newNatural.left) + midAnim.left - 2 * newNatural.left;
+      const fromTransY =
+        (preFlip?.top ?? newNatural.top) + midAnim.top - 2 * newNatural.top;
+
+      if (Math.abs(fromTransX) <= 0.5 && Math.abs(fromTransY) <= 0.5) return;
+
+      const corrAnim = el.animate(
+        [
+          { transform: `translate(${fromTransX}px, ${fromTransY}px)`, offset: 0 },
+          { transform: 'translate(0px, 0px)', offset: 1 },
+        ],
+        { duration: remainingTime, easing: 'ease-out', fill: 'forwards' },
+      );
+      rearrangeAnimations.current.set(item, corrAnim);
     });
 
     preFlipRects.current = new Map();
-    phase1TopRowItems.current = new Set();
-    if (deltas.length === 0) return;
-
-    // Apply before browser paint → tiles snap to from-positions, then animate.
-    for (const { el, d } of deltas) {
-      el.style.setProperty('--flip-x', `${d.dx}px`);
-      el.style.setProperty('--flip-y', `${d.dy}px`);
-      el.classList.add('animate-tile-flip');
-    }
-
-    // Clean up after animation completes (340ms + small buffer)
-    const cleanup = setTimeout(() => {
-      for (const { el } of deltas) {
-        el.classList.remove('animate-tile-flip');
-        el.style.removeProperty('--flip-x');
-        el.style.removeProperty('--flip-y');
-      }
-    }, 400);
-
-    return () => clearTimeout(cleanup);
   });
 
   return (

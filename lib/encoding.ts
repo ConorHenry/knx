@@ -1,5 +1,5 @@
 import { deflateSync, inflateSync } from 'fflate';
-import { type Puzzle, type Category, type Difficulty, DIFFICULTY_ORDER } from './types';
+import { type Puzzle, type Category, type Difficulty } from './types';
 
 // Compact serialization: color|name|item1|item2|item3|item4
 // Four rows joined by ~

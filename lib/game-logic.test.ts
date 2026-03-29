@@ -8,7 +8,6 @@ import {
   validatePuzzleComplete,
 } from './game-logic';
 import type { Puzzle } from './types';
-import { DIFFICULTY_ORDER } from './types';
 
 const SAMPLE_PUZZLE: Puzzle = {
   categories: [

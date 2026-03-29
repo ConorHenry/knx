@@ -1,6 +1,6 @@
 'use client';
 
-import { type Puzzle, DIFFICULTY_COLORS, DIFFICULTY_LABELS } from '@/lib/types';
+import { type Puzzle, DIFFICULTY_COLORS } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import type { GuessRecord } from '@/hooks/useGameState';
 
