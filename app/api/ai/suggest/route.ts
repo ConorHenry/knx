@@ -136,14 +136,25 @@ function buildPrompt(
   const difficulty = difficultyLabel(primaryCat.color);
   const catName = sameCatName ?? primaryCat.name;
 
-  // Cross-cat context as a readable description
+  // Cross-cat context formatted for prompts.
+  // Single group → inline phrase. Multiple groups → numbered list.
   function crossCatDescription(): string {
-    return Array.from(crossCatGroups.values()).map((g) => {
+    const groups = Array.from(crossCatGroups.values());
+    return groups.map((g, i) => {
       const label = g.name ? `"${g.name}"` : `a ${difficultyLabel(g.color)} category`;
       const tiles = g.tiles.length > 0 ? ` (e.g. ${g.tiles.join(', ')})` : '';
-      return `${label}${tiles}`;
-    }).join('; ');
+      const entry = `${label}${tiles}`;
+      return groups.length === 1 ? entry : `  ${i + 1}. ${entry}`;
+    }).join(groups.length === 1 ? '' : '\n');
   }
+
+  // Names of other already-filled categories in the puzzle (for name-distinctness check).
+  const otherCatNames = Array.from(catMap.values())
+    .filter(c => c.id !== primaryCatId && c.name.trim())
+    .map(c => `"${c.name.trim()}"`);
+  const distinctNote = otherCatNames.length > 0
+    ? `\n\nThe new name must feel clearly different in theme from these other categories already in the puzzle: ${otherCatNames.join(', ')}`
+    : '';
 
   // Exclusion note appended to prompts when the user has already seen some values
   const excludeNote = exclude.length > 0
@@ -167,7 +178,7 @@ Follow the style of real NYT Connections names, for example:
 • "___ ball"
 • "Things found in a kitchen"
 
-Each name must be distinct.${excludeNote}
+Each name must be distinct.${distinctNote}${excludeNote}
 
 Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${total > 1 ? 's' : ''}`,
       };
@@ -181,7 +192,7 @@ Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${
         prompt: `These tiles belong to the same "${difficulty}" difficulty NYT Connections category:
 ${tiles}
 
-Suggest ${total} concise category name${total > 1 ? 's' : ''} that precisely capture${total === 1 ? 's' : ''} their connection. Each name must be distinct.${excludeNote}
+Suggest ${total} concise category name${total > 1 ? 's' : ''} that precisely capture${total === 1 ? 's' : ''} their connection. Each name must be distinct.${distinctNote}${excludeNote}
 
 Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${total > 1 ? 's' : ''}`,
       };
@@ -208,15 +219,19 @@ Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${
       const total = n * overfetch;
       const sameCatNote = sameCatTiles.length > 0
         ? `\nOther tiles in this category: ${sameCatTiles.join(', ')}` : '';
+      const crossCatCount = crossCatGroups.size;
+      const redHerringInstruction = crossCatCount > 1
+        ? `Could plausibly be mistaken for a tile from at least one of these categories:\n${crossCatDescription()}\n\nEach tile only needs to mislead toward one category — focus on the most convincing individual pairing rather than trying to satisfy all categories at once.`
+        : `Could plausibly be confused with tiles from: ${crossCatDescription()}`;
       return {
         expectedCount: total,
         prompt: `NYT Connections category: "${catName}" (${difficulty})${sameCatNote}
 
 Suggest ${total} tile${total > 1 ? 's' : ''} that:
 1. Genuinely belong in "${catName}"
-2. Could plausibly be confused with tiles from: ${crossCatDescription()}
+2. ${redHerringInstruction}
 
-This makes them "red herrings" — players might think they belong to the other category. All suggestions must be distinct.${excludeNote}
+All suggestions must be distinct.${excludeNote}
 
 Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${total > 1 ? 's' : ''}`,
       };
@@ -250,7 +265,9 @@ Return: { "values": [${valuesPlaceholder(total)}] } — exactly ${total} value${
 
       return {
         expectedCount: grandTotal,
-        prompt: `Suggest tiles for ${catOrder.length} different NYT Connections categories. The suggestions should be mutual red herrings — each tile genuinely belongs in its own category, but could plausibly be confused with a tile from one of the other categories.
+        prompt: `Suggest tiles for ${catOrder.length} different NYT Connections categories. The tiles should be mutual red herrings — each tile genuinely belongs in its own category, but could plausibly be mistaken for a tile from at least one other category listed here.
+
+Important: each tile only needs to mislead toward one other category — focus on the most convincing individual pairing. Do not try to make every tile confusable with all categories at once; that produces weak suggestions.
 
 ${catDescriptions}
 
@@ -269,7 +286,7 @@ Return: { "values": [${valuesPlaceholder(grandTotal)}] } — exactly ${grandTota
       const totalValues = 1 + tileCount; // name + tiles, no overfetch
       return {
         expectedCount: totalValues,
-        prompt: `Create a new NYT Connections category (${difficulty} difficulty).${contextNote}
+        prompt: `Create a new NYT Connections category (${difficulty} difficulty).${contextNote}${distinctNote}
 
 Suggest:
 • Line 1: a category name
@@ -283,15 +300,18 @@ Return: { "values": ["category name", ${valuesPlaceholder(tileCount)}] } — exa
       const tileTargets = targets.filter(t => deserializeFieldId(t).kind === 'tile');
       const tileCount = tileTargets.length;
       const totalValues = 1 + tileCount; // name + all tile targets, no overfetch
-      const tileLabel = tileCount === 1 ? 'a red herring tile' : `${tileCount} red herring tiles`;
       const tileLines = tileCount === 1
         ? '• Line 2: the red herring tile'
         : Array.from({ length: tileCount }, (_, i) => `• Line ${i + 2}: red herring tile ${i + 1}`).join('\n');
+      const crossCatCount = crossCatGroups.size;
+      const tileInstruction = crossCatCount > 1
+        ? `Each tile must genuinely belong in the category and be a convincing red herring for at least one of these categories (each tile only needs to fool players toward one — pick the best individual pairing):\n${crossCatDescription()}`
+        : `Each tile must genuinely belong in the category but could also be confused with tiles from: ${crossCatDescription()}`;
       return {
         expectedCount: totalValues,
-        prompt: `Create a new NYT Connections category (${difficulty} difficulty).
+        prompt: `Create a new NYT Connections category (${difficulty} difficulty).${distinctNote}
 
-The category must include ${tileLabel} — each genuinely belongs in the category, but could also be confused with tiles from: ${crossCatDescription()}
+${tileInstruction}
 
 Suggest:
 • Line 1: a category name
