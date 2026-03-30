@@ -271,9 +271,12 @@ export function useAiMode(
 
   // ── Public actions ─────────────────────────────────────────────────────────
 
-  const enterAiMode = useCallback(() => {
+  const enterAiMode = useCallback((initialField?: FieldId) => {
     poolsRef.current = new Map(); // fresh pools on each AI mode session
     dispatch({ type: 'ENTER' });
+    if (initialField) {
+      dispatch({ type: 'TOGGLE_FIELD', fieldId: serializeFieldId(initialField) });
+    }
   }, []);
 
   const exitAiMode = useCallback(() => {

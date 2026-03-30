@@ -19,9 +19,10 @@ interface PuzzleGridProps {
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 // Total duration for individual tile rearrangement paths.
-// Must exceed COMPLETE_SOLVE_DELAY_MS so the Phase 2 correction
-// still has meaningful time to smoothly land tiles on their actual targets.
-const REARRANGE_DURATION_MS = 800;
+// Phase 1 prediction runs until COMPLETE_SOLVE fires; Phase 2 then takes over
+// for the remaining ~680ms correction window. This must exceed
+// COMPLETE_SOLVE_DELAY_MS or the handoff will visibly jump.
+const REARRANGE_DURATION_MS = 1320;
 
 // Cleanup margin after all animations finish.
 const PHASE2_CLEANUP_BUFFER_MS = 400;

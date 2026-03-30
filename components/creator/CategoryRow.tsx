@@ -29,6 +29,7 @@ interface CategoryRowProps {
   getFieldInfo: ReturnType<typeof useAiMode>['getFieldInfo'];
   onToggleField: (fieldId: FieldId) => void;
   onClearField: (fieldId: FieldId) => void;
+  onFieldFocus?: (fieldId: FieldId) => void;
 }
 
 export function CategoryRow({
@@ -41,6 +42,7 @@ export function CategoryRow({
   getFieldInfo,
   onToggleField,
   onClearField,
+  onFieldFocus,
 }: CategoryRowProps) {
   const bgColor = DIFFICULTY_COLORS[category.color];
   const nameFieldId: FieldId = { kind: 'name', catId: category.id };
@@ -70,7 +72,7 @@ export function CategoryRow({
               className="w-3 h-3 rounded-full border border-black/20"
               style={{ backgroundColor: bgColor }}
             />
-            {DIFFICULTY_LABELS[category.color]}
+            <span className="hidden sm:inline">{DIFFICULTY_LABELS[category.color]}</span>
             <ChevronDown className="w-3 h-3" />
           </PopoverTrigger>
           <PopoverContent className="w-48 p-1">
@@ -105,6 +107,7 @@ export function CategoryRow({
               placeholder="Category name"
               value={category.name}
               onChange={(e) => onNameChange(e.target.value)}
+              onFocus={() => onFieldFocus?.(nameFieldId)}
               maxLength={60}
               className="bg-white/70"
               aria-label="Category name"
@@ -142,6 +145,7 @@ export function CategoryRow({
               placeholder={`Item ${idx + 1}`}
               value={item}
               onChange={(e) => onItemChange(idx, e.target.value)}
+              onFocus={() => onFieldFocus?.(tileFieldId)}
               maxLength={40}
               className={
                 isDupe

@@ -192,11 +192,11 @@ function reducer(state: GameState, action: Action): GameState {
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 // Keep in sync with the CSS animation durations in globals.css.
-/** Tiles reach their top-row targets at ~360 ms; fire just before so the
- *  category row begins forming as the tiles arrive. */
-const COMPLETE_SOLVE_DELAY_MS = 1920;
+/** Fire shortly before the 720ms drift completes so Phase 2 can take over
+ *  while the Phase 1 motion is still in flight. */
+const COMPLETE_SOLVE_DELAY_MS = 640;
 /** Pause between the 3rd category reveal and the last auto-solve. */
-const AUTO_SOLVE_DELAY_MS = 2280;
+const AUTO_SOLVE_DELAY_MS = 760;
 
 export function useGameState(puzzle: Puzzle) {
   const [state, dispatch] = useReducer(reducer, puzzle, makeInitialState);
