@@ -1,5 +1,12 @@
 A quick project I made with claude code in a few days
 
+Clone of NYT Connections game with a AI supported creator mode 
+
+Create your own puzzles and send them to your friends
+
+Try it here:
+https://knx-teal.vercel.app/play?p=JY5LbsMwDESvwgv0EHY_QYGiEOJuuqRl1iJEi4GkNB8QOXsYZDczGLyZX_tRlQb6Bwgx0cat20iYqdqHYMs2vH6-2Z5wpdJvOwtY-7Od8Ip1gXbZZhWb8lHEvnhNvXBZXzzrD8JGzd7P0QV21gIHZeeMNrSmkbHTAifuCQ5c3TTbqSwWBEu2_XGzmXzjFuzbQQsMInppYFOnKr4CE8u_Px2rlitZ4BLTTDFboJNX7g
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
