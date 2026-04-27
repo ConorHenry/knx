@@ -1,4 +1,4 @@
-A quick project I made with claude code in a few days
+A quick project I made with claude code in a few days to prove I know how to use it
 
 Clone of NYT Connections game with a AI supported creator mode 
 
